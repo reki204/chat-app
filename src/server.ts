@@ -1,36 +1,59 @@
 import express from 'express';
 import * as http from 'http';
 import * as socketio from "socket.io";
+import createHttpError from 'http-errors';
 
-const app: express.Express = express();
-const PORT: Number = 3000;
-const server: http.Server = http.createServer(app);
-const io = new socketio.Server(server);
+export class AppServer {
+  public app: express.Application;
+  public server: http.Server;
+  public PORT: number;
+  public io: any;
 
-// CORSの許可
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "*");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-  next();
-})
+  constructor() {
+    this.app = express();
+    this.PORT = 3000;
+    this.server = http.createServer(this.app);
+    this.io = new socketio.Server(this.server);
+    this.routes();
+  };
 
-app.get('/', (req: express.Request, res: express.Response) => {
-  res.sendFile(__dirname + '/index.html');
-});
+  public routes() {
+    this.app.get('/', (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      res.sendFile(__dirname + '/index.html');
+    });
 
-io.on('connection', (socket: socketio.Socket) => {
-  console.log('ユーザーが接続しました');
+    this.io.on('connection', (socket: socketio.Socket) => {
+      console.log('ユーザーが接続しました');
+  
+      socket.on('chat message', (msg: string) => {
+        console.log(msg);
+        this.io.emit('chat message', msg);
+      });
+    });
 
-  socket.on('chat message', (msg: string) => {
-    console.log(msg);
-    io.emit('chat message', msg);
-  });
-});
+    this.app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+      next(new createHttpError.NotFound());
+    });
+    
+    // errorHandler
+    const errHandler: express.ErrorRequestHandler = (err, req, res, next) => {
+      res.status(err.status || 500);
+      res.send({
+        status: err.status || 500,
+        message: err.message
+      });
+    };
 
-server.listen(PORT, (err?: any) => {
-  if (err) {
-    return console.error(err);
-  }
-  return console.log(`listening on ${PORT}`);
-});
+    this.app.use(errHandler);
+  };
+
+
+  public start() {
+    this.app.listen(this.PORT, (err?: any) => {
+      if (err) {
+        return console.error(err);
+      }
+      return console.log(`listening on ${this.PORT}`);
+    });
+  };
+};
